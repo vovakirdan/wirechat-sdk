@@ -7,7 +7,9 @@ authors = [
     { name = "Vladimir Kirdan", email = "vova.kirdan@mail.ru" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "websockets>=15.0.1",
+]
 
 [project.scripts]
 wirechat-sdk-python = "wirechat_sdk_python:main"
