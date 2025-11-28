@@ -20,8 +20,8 @@ const (
 
 // Inbound represents the envelope from client to server.
 type Inbound struct {
-	Type string      `json:"type"`
-	Data any `json:"data,omitempty"`
+	Type string `json:"type"`
+	Data any    `json:"data,omitempty"`
 }
 
 // Outbound is the envelope server -> client.

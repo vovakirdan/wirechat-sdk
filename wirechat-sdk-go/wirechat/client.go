@@ -100,6 +100,7 @@ func (c *Client) Connect(ctx context.Context) error {
 		Data: HelloPayload{
 			Protocol: ProtocolVersion,
 			Token:    c.cfg.Token,
+			User:     c.cfg.User,
 		},
 	}
 	if err := c.conn.Write(ctx, hello); err != nil {

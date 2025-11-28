@@ -6,6 +6,7 @@ import "time"
 type Config struct {
 	URL              string
 	Token            string // JWT for hello
+	User             string // Username (used when JWT is not required)
 	HandshakeTimeout time.Duration
 	ReadTimeout      time.Duration
 	WriteTimeout     time.Duration
