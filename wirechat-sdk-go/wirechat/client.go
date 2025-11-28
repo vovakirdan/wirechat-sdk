@@ -3,6 +3,7 @@ package wirechat
 import (
 	"context"
 	"errors"
+	"io"
 	"net/url"
 	"sync"
 
@@ -168,6 +169,9 @@ func (c *Client) readLoop(ctx context.Context) {
 	for {
 		var out Outbound
 		if err := c.conn.Read(ctx, &out); err != nil {
+			if isExpectedDisconnect(ctx, err) {
+				return
+			}
 			c.dispatcher.Dispatch(Outbound{Type: outboundError, Error: &Error{Code: "read_error", Msg: err.Error()}})
 			c.logger.Warn("read loop exit", map[string]interface{}{"error": err.Error()})
 			return
@@ -188,5 +192,23 @@ func (c *Client) writeLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		}
+	}
+}
+
+func isExpectedDisconnect(ctx context.Context, err error) bool {
+	if err == nil {
+		return false
+	}
+	if ctx != nil && ctx.Err() != nil {
+		return true
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, io.EOF) {
+		return true
+	}
+	switch websocket.CloseStatus(err) {
+	case websocket.StatusNormalClosure, websocket.StatusGoingAway:
+		return true
+	default:
+		return false
 	}
 }
