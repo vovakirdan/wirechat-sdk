@@ -3,5 +3,15 @@ name = "wirechat-sdk-python"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
+authors = [
+    { name = "Vladimir Kirdan", email = "vova.kirdan@mail.ru" }
+]
 requires-python = ">=3.12"
 dependencies = []
+
+[project.scripts]
+wirechat-sdk-python = "wirechat_sdk_python:main"
+
+[build-system]
+requires = ["uv_build>=0.8.14,<0.9.0"]
+build-backend = "uv_build"
