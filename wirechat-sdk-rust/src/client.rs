@@ -9,6 +9,8 @@ use tokio::sync::{broadcast, mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio::time;
 use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::protocol::CloseFrame;
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
 
 use crate::PROTOCOL_VERSION;
@@ -308,7 +310,7 @@ async fn write_loop(
 
     if should_close {
         // try to send close frame; ignore errors
-        let _ = time::timeout(write_timeout, sink.send(Message::Close(None))).await;
+        let _ = send_close(&mut sink, write_timeout).await;
         let _ = sink.close().await;
     }
 }
@@ -486,6 +488,26 @@ async fn send_inbound(
 ) -> Result<(), WirechatError> {
     let payload = serde_json::to_string(&inbound)?;
     let send_fut = sink.send(Message::Text(payload.into()));
+    if write_timeout > Duration::ZERO {
+        time::timeout(write_timeout, send_fut)
+            .await
+            .map_err(WirechatError::from)?
+            .map_err(WirechatError::from)?;
+    } else {
+        send_fut.await.map_err(WirechatError::from)?;
+    }
+    Ok(())
+}
+
+async fn send_close(
+    sink: &mut SplitSink<WsStream, Message>,
+    write_timeout: Duration,
+) -> Result<(), WirechatError> {
+    let frame = CloseFrame {
+        code: CloseCode::Normal,
+        reason: "client close".into(),
+    };
+    let send_fut = sink.send(Message::Close(Some(frame)));
     if write_timeout > Duration::ZERO {
         time::timeout(write_timeout, send_fut)
             .await
