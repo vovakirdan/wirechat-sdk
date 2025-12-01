@@ -1,4 +1,4 @@
-module github.com/vovakirdan/wirechat-sdk-go
+module github.com/vovakirdan/wirechat-sdk/wirechat-sdk-go
 
 go 1.25.2
 

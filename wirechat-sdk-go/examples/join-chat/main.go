@@ -10,7 +10,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/vovakirdan/wirechat-sdk-go/wirechat"
+	"github.com/vovakirdan/wirechat-sdk/wirechat-sdk-go/wirechat"
 )
 
 func main() {
