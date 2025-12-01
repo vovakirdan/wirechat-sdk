@@ -1,4 +1,12 @@
-from wirechat import (  # re-export for backwards compatibility
+from .client import WirechatClient
+from .errors import (
+    NotConnectedError,
+    WirechatConnectionError,
+    WirechatError,
+    WirechatProtocolError,
+    WirechatServerError,
+)
+from .types import (
     Config,
     HelloPayload,
     JoinPayload,
@@ -6,12 +14,6 @@ from wirechat import (  # re-export for backwards compatibility
     MsgPayload,
     ProtocolVersion,
     UserEvent,
-    WirechatClient,
-    WirechatConnectionError,
-    WirechatError,
-    WirechatProtocolError,
-    WirechatServerError,
-    NotConnectedError,
 )
 
 __all__ = [
@@ -29,7 +31,3 @@ __all__ = [
     "WirechatServerError",
     "NotConnectedError",
 ]
-
-
-def main() -> None:
-    print("Wirechat Python SDK is installed. Import from 'wirechat' to use.")
