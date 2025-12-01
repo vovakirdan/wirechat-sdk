@@ -26,6 +26,7 @@ func run() error {
 	cfg := wirechat.DefaultConfig()
 	cfg.URL = "ws://localhost:8080/ws"
 	cfg.User = "join-and-chat"
+	cfg.ReadTimeout = 0 // Disable read timeout - server handles idle detection with ping/pong
 
 	client := wirechat.NewClient(cfg)
 

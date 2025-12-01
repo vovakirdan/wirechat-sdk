@@ -27,16 +27,9 @@ type Client struct {
 }
 
 // NewClient constructs a client with provided config.
+// Use DefaultConfig() as a starting point and modify as needed.
+// Set timeout to 0 to disable it.
 func NewClient(cfg Config) *Client {
-	if cfg.HandshakeTimeout == 0 {
-		cfg.HandshakeTimeout = DefaultConfig().HandshakeTimeout
-	}
-	if cfg.ReadTimeout == 0 {
-		cfg.ReadTimeout = DefaultConfig().ReadTimeout
-	}
-	if cfg.WriteTimeout == 0 {
-		cfg.WriteTimeout = DefaultConfig().WriteTimeout
-	}
 	return &Client{
 		cfg:     cfg,
 		logger:  noopLogger{},

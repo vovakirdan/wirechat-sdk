@@ -23,6 +23,13 @@ EVENT_USER_LEFT = "user_left"
 
 @dataclass
 class Config:
+    """WireChat client configuration.
+
+    Timeout behavior:
+    - Positive value: Use custom timeout in seconds
+    - 0: Disable timeout (wait indefinitely)
+    - Negative: Use default timeout
+    """
     url: str
     token: Optional[str] = None
     user: Optional[str] = None

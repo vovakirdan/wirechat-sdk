@@ -287,16 +287,17 @@ class WirechatClient:
 
     @staticmethod
     def _apply_defaults(cfg: Config) -> Config:
+        # Allow 0 to disable timeouts, only apply defaults for negative values
         handshake = cfg.handshake_timeout
-        if handshake is None or handshake <= 0:
+        if handshake is None or handshake < 0:
             handshake = CONFIG_DEFAULT_HANDSHAKE_TIMEOUT
 
         read = cfg.read_timeout
-        if read is None or read <= 0:
+        if read is None or read < 0:
             read = CONFIG_DEFAULT_READ_TIMEOUT
 
         write = cfg.write_timeout
-        if write is None or write <= 0:
+        if write is None or write < 0:
             write = CONFIG_DEFAULT_WRITE_TIMEOUT
         return Config(
             url=cfg.url,
