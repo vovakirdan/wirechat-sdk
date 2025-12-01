@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"sync"
 
-	"wirechat-sdk-go/wirechat/internal"
+	"github.com/vovakirdan/wirechat-sdk-go/wirechat/internal"
 
 	"github.com/coder/websocket"
 )
