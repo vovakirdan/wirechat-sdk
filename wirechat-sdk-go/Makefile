@@ -10,7 +10,7 @@ GOLANGCI_LINT := $(GOBIN)/golangci-lint
 GOLANGCI_LINT_VERSION := v1.62.2
 
 # Version can be overridden: make tag-create VERSION=v0.2.0
-VERSION ?= v0.1.0
+VERSION ?= v0.1.1
 TAG_NAME := wirechat-sdk-go/$(VERSION)
 
 all: build
