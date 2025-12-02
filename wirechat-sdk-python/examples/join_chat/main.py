@@ -25,6 +25,7 @@ async def main() -> None:
         url="ws://localhost:8080/ws",
         user="join-and-chat",
         token="",
+        read_timeout=0.0,  # Disable read timeout - server handles idle detection with ping/pong
     )
     client = WirechatClient(cfg)
 
