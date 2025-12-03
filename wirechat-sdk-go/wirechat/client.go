@@ -79,16 +79,16 @@ func (c *Client) Connect(ctx context.Context) error {
 	c.mu.Lock()
 	if c.connected {
 		c.mu.Unlock()
-		return errors.New("already connected")
+		return NewError(ErrorInvalidConfig, "already connected")
 	}
 	c.mu.Unlock()
 
 	if c.cfg.URL == "" {
-		return errors.New("empty URL")
+		return NewError(ErrorInvalidConfig, "empty URL")
 	}
 	u, err := url.Parse(c.cfg.URL)
 	if err != nil {
-		return err
+		return WrapError(ErrorInvalidConfig, "invalid WebSocket URL", err)
 	}
 
 	dialCtx := ctx
@@ -100,7 +100,7 @@ func (c *Client) Connect(ctx context.Context) error {
 
 	ws, _, err := websocket.Dial(dialCtx, u.String(), nil)
 	if err != nil {
-		return err
+		return WrapError(ErrorConnection, "failed to dial WebSocket", err)
 	}
 
 	c.rawConn = ws
@@ -122,7 +122,7 @@ func (c *Client) Connect(ctx context.Context) error {
 	}
 	if err := c.conn.Write(ctx, hello); err != nil {
 		_ = c.conn.Close(websocket.StatusInternalError, "handshake error")
-		return err
+		return WrapError(ErrorConnection, "failed to send hello handshake", err)
 	}
 
 	runCtx, cancel := context.WithCancel(context.Background())
@@ -170,7 +170,7 @@ func (c *Client) send(ctx context.Context, in Inbound) error {
 	connected := c.connected
 	c.mu.Unlock()
 	if !connected {
-		return errors.New("not connected")
+		return NewError(ErrorNotConnected, "client not connected")
 	}
 
 	select {
@@ -188,7 +188,8 @@ func (c *Client) readLoop(ctx context.Context) {
 			if isExpectedDisconnect(ctx, err) {
 				return
 			}
-			c.dispatcher.Dispatch(Outbound{Type: outboundError, Error: &Error{Code: "read_error", Msg: err.Error()}})
+			wireErr := WrapError(ErrorConnection, "read error", err)
+			c.dispatcher.fireError(wireErr)
 			c.logger.Warn("read loop exit", map[string]interface{}{"error": err.Error()})
 			return
 		}

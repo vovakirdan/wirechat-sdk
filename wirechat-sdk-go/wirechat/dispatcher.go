@@ -17,7 +17,8 @@ func (d *Dispatcher) SetOnError(fn func(error))          { d.onError = fn }
 
 func (d *Dispatcher) Dispatch(out Outbound) {
 	if out.Type == outboundError && out.Error != nil && d.onError != nil {
-		d.onError(out.Error)
+		// Convert protocol error to WirechatError
+		d.onError(FromProtocolError(out.Error))
 		return
 	}
 	switch out.Event {
@@ -27,7 +28,7 @@ func (d *Dispatcher) Dispatch(out Outbound) {
 		}
 		var ev MessageEvent
 		if err := UnmarshalData(out.Data, &ev); err != nil {
-			d.fireError(err)
+			d.fireError(WrapError(ErrorSerialization, "failed to unmarshal message event", err))
 			return
 		}
 		d.onMessage(ev)
@@ -37,7 +38,7 @@ func (d *Dispatcher) Dispatch(out Outbound) {
 		}
 		var ev UserEvent
 		if err := UnmarshalData(out.Data, &ev); err != nil {
-			d.fireError(err)
+			d.fireError(WrapError(ErrorSerialization, "failed to unmarshal user_joined event", err))
 			return
 		}
 		d.onUserJoined(ev)
@@ -47,7 +48,7 @@ func (d *Dispatcher) Dispatch(out Outbound) {
 		}
 		var ev UserEvent
 		if err := UnmarshalData(out.Data, &ev); err != nil {
-			d.fireError(err)
+			d.fireError(WrapError(ErrorSerialization, "failed to unmarshal user_left event", err))
 			return
 		}
 		d.onUserLeft(ev)
@@ -57,7 +58,7 @@ func (d *Dispatcher) Dispatch(out Outbound) {
 		}
 		var ev HistoryEvent
 		if err := UnmarshalData(out.Data, &ev); err != nil {
-			d.fireError(err)
+			d.fireError(WrapError(ErrorSerialization, "failed to unmarshal history event", err))
 			return
 		}
 		d.onHistory(ev)
