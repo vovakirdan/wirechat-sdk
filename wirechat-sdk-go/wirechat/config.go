@@ -15,6 +15,12 @@ type Config struct {
 
 	// REST API configuration
 	RESTBaseURL string // REST API base URL (e.g., "http://localhost:8080/api")
+
+	// Auto-reconnect configuration
+	AutoReconnect     bool          // Enable automatic reconnection on disconnect
+	ReconnectInterval time.Duration // Initial reconnect delay (default: 1s)
+	MaxReconnectDelay time.Duration // Maximum reconnect delay (default: 30s)
+	MaxReconnectTries int           // Maximum reconnect attempts (0 = infinite, default: 0)
 }
 
 // DefaultConfig returns sensible defaults.
@@ -22,11 +28,16 @@ type Config struct {
 // ReadTimeout is set to 0 (infinite) because chat messages arrive sporadically.
 // The server handles connection keepalive via ping/pong frames.
 // HandshakeTimeout and WriteTimeout are set to reasonable values to detect network issues during active operations.
+// AutoReconnect is disabled by default - clients must opt-in.
 func DefaultConfig() Config {
 	return Config{
-		Protocol:         1,
-		HandshakeTimeout: 10 * time.Second,
-		ReadTimeout:      0, // 0 = infinite, wait for server ping/pong
-		WriteTimeout:     10 * time.Second,
+		Protocol:          1,
+		HandshakeTimeout:  10 * time.Second,
+		ReadTimeout:       0, // 0 = infinite, wait for server ping/pong
+		WriteTimeout:      10 * time.Second,
+		AutoReconnect:     false, // Disabled by default
+		ReconnectInterval: 1 * time.Second,
+		MaxReconnectDelay: 30 * time.Second,
+		MaxReconnectTries: 0, // 0 = infinite retries
 	}
 }
