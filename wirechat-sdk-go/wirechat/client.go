@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/vovakirdan/wirechat-sdk/wirechat-sdk-go/wirechat/internal"
+	"github.com/vovakirdan/wirechat-sdk/wirechat-sdk-go/wirechat/rest"
 
 	"github.com/coder/websocket"
 )
@@ -21,6 +22,9 @@ type Client struct {
 	writeCh    chan Inbound
 	dispatcher Dispatcher
 
+	// REST API client
+	REST *rest.Client
+
 	mu        sync.Mutex
 	connected bool
 	cancel    context.CancelFunc
@@ -30,11 +34,21 @@ type Client struct {
 // Use DefaultConfig() as a starting point and modify as needed.
 // Set timeout to 0 to disable it.
 func NewClient(cfg *Config) *Client {
-	return &Client{
+	c := &Client{
 		cfg:     *cfg,
 		logger:  noopLogger{},
 		writeCh: make(chan Inbound, 16),
 	}
+
+	// Initialize REST client if RESTBaseURL is provided
+	if cfg.RESTBaseURL != "" {
+		c.REST = rest.NewClient(cfg.RESTBaseURL)
+		if cfg.Token != "" {
+			c.REST.SetToken(cfg.Token)
+		}
+	}
+
+	return c
 }
 
 // SetLogger overrides logger (optional).

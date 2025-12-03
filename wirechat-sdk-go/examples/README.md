@@ -76,6 +76,26 @@ curl -X POST http://localhost:8080/api/register \
 
 Полученный токен вставьте в `examples/test-history/main.go` (константа `token`).
 
+### [rest-demo](./rest-demo) - REST API Demo
+
+Комплексный пример использования REST API клиента:
+- Регистрация пользователя через REST API
+- Создание комнаты
+- Получение списка комнат
+- Интеграция с WebSocket (отправка сообщений)
+- Получение истории сообщений через REST
+- Демонстрация pagination
+
+```bash
+go run ./examples/rest-demo
+```
+
+**Демонстрирует**:
+- Unified client (WebSocket + REST API в одном клиенте)
+- Authentication flow
+- Full CRUD для комнат
+- Message history с cursor-based pagination
+
 ## Советы
 
 - **Guest mode**: Оставьте `cfg.Token = ""` для подключения как guest

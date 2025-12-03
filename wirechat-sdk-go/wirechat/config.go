@@ -4,6 +4,7 @@ import "time"
 
 // Config controls how the SDK connects.
 type Config struct {
+	// WebSocket configuration
 	URL              string
 	Protocol         int           // Protocol version (default: 1)
 	Token            string        // JWT for hello
@@ -11,6 +12,9 @@ type Config struct {
 	HandshakeTimeout time.Duration // 0 = no timeout, positive = custom timeout
 	ReadTimeout      time.Duration // 0 = no timeout, positive = custom timeout
 	WriteTimeout     time.Duration // 0 = no timeout, positive = custom timeout
+
+	// REST API configuration
+	RESTBaseURL string // REST API base URL (e.g., "http://localhost:8080/api")
 }
 
 // DefaultConfig returns sensible defaults.

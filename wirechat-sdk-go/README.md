@@ -1,14 +1,25 @@
 # WireChat SDK для Go
 
-Официальный Go SDK для подключения к WireChat серверу. Предоставляет высокоуровневый API для работы с WebSocket соединением, комнатами и сообщениями.
+Официальный Go SDK для подключения к WireChat серверу. Предоставляет высокоуровневый API для работы с WebSocket соединением, комнатами, сообщениями и REST API.
+
+## Возможности
+
+- **WebSocket API**: Real-time подключение для чата
+- **REST API**: Управление комнатами, аутентификация, история сообщений
+- **Unified Client**: Единый клиент для WebSocket и REST API
+- **Event-driven**: Обработчики событий для сообщений, присоединений, истории
+- **Protocol v1**: Полная поддержка WireChat Protocol Version 1
+- **Type-safe**: Строгая типизация всех API
 
 ## Установка
 
 ```bash
-go get wirechat-sdk-go
+go get github.com/vovakirdan/wirechat-sdk/wirechat-sdk-go
 ```
 
 ## Быстрый старт
+
+### WebSocket API
 
 ```go
 package main
@@ -17,7 +28,7 @@ import (
     "context"
     "fmt"
     "log"
-    "wirechat-sdk-go/wirechat"
+    "github.com/vovakirdan/wirechat-sdk/wirechat-sdk-go/wirechat"
 )
 
 func main() {
@@ -27,7 +38,7 @@ func main() {
     cfg.User = "my-user" // или cfg.Token для JWT авторизации
 
     // Создаем клиент
-    client := wirechat.NewClient(cfg)
+    client := wirechat.NewClient(&cfg)
 
     // Настраиваем обработчики событий
     client.OnMessage(func(ev wirechat.MessageEvent) {
@@ -47,6 +58,63 @@ func main() {
 }
 ```
 
+### REST API
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "github.com/vovakirdan/wirechat-sdk/wirechat-sdk-go/wirechat"
+    "github.com/vovakirdan/wirechat-sdk/wirechat-sdk-go/wirechat/rest"
+)
+
+func main() {
+    ctx := context.Background()
+
+    // Создаем клиент с REST API
+    cfg := wirechat.DefaultConfig()
+    cfg.URL = "ws://localhost:8080/ws"
+    cfg.RESTBaseURL = "http://localhost:8080/api"
+
+    client := wirechat.NewClient(&cfg)
+
+    // Регистрируем нового пользователя
+    resp, err := client.REST.Register(ctx, rest.RegisterRequest{
+        Username: "alice",
+        Password: "secret123",
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // Обновляем токен для WebSocket
+    client.REST.SetToken(resp.Token)
+    cfg.Token = resp.Token
+
+    // Создаем комнату
+    room, err := client.REST.CreateRoom(ctx, rest.CreateRoomRequest{
+        Name: "my-room",
+        Type: rest.RoomTypePublic,
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    fmt.Printf("Created room: %s (ID: %d)\n", room.Name, room.ID)
+
+    // Получаем историю сообщений
+    history, err := client.REST.GetMessages(ctx, room.ID, 20, nil)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    fmt.Printf("Found %d messages\n", len(history.Messages))
+}
+```
+
 ## API Reference
 
 ### Config
@@ -58,8 +126,10 @@ type Config struct {
     URL              string        // WebSocket URL (например, "ws://localhost:8080/ws")
     Token            string        // JWT токен для авторизации (если требуется)
     User             string        // Имя пользователя (используется, если JWT не требуется)
+    Protocol         int           // Версия протокола (по умолчанию 1)
+    RESTBaseURL      string        // REST API base URL (например, "http://localhost:8080/api")
     HandshakeTimeout time.Duration // Таймаут установления соединения
-    ReadTimeout      time.Duration // Таймаут чтения сообщений
+    ReadTimeout      time.Duration // Таймаут чтения сообщений (0 = infinite, рекомендуется)
     WriteTimeout     time.Duration // Таймаут отправки сообщений
 }
 ```
@@ -68,14 +138,18 @@ type Config struct {
 
 Возвращает конфигурацию с разумными значениями по умолчанию:
 - `HandshakeTimeout`: 10 секунд
-- `ReadTimeout`: 30 секунд
+- `ReadTimeout`: 0 (infinite - рекомендуется для long-lived соединений)
 - `WriteTimeout`: 10 секунд
+- `Protocol`: 1 (текущая версия протокола)
+
+**Важно о ReadTimeout**: Значение 0 означает бесконечное ожидание. Это рекомендуемое значение для чат-соединений, так как сервер управляет liveness через WebSocket ping/pong механизм.
 
 Пример:
 
 ```go
 cfg := wirechat.DefaultConfig()
 cfg.URL = "ws://localhost:8080/ws"
+cfg.RESTBaseURL = "http://localhost:8080/api"
 cfg.User = "alice"
 ```
 
@@ -85,12 +159,24 @@ cfg.User = "alice"
 
 **Потокобезопасность:** Методы `Join`, `Leave`, `Send` и обработчики событий могут вызываться из разных горутин. Однако `Connect` и `Close` должны вызываться последовательно и не должны вызываться одновременно.
 
-#### NewClient(cfg Config) *Client
+**REST API**: Клиент предоставляет доступ к REST API через поле `REST *rest.Client`. REST клиент автоматически инициализируется, если в `Config` указан `RESTBaseURL`.
+
+#### NewClient(cfg *Config) *Client
 
 Создает новый клиент с указанной конфигурацией.
 
 ```go
-client := wirechat.NewClient(cfg)
+cfg := wirechat.DefaultConfig()
+cfg.URL = "ws://localhost:8080/ws"
+cfg.RESTBaseURL = "http://localhost:8080/api"
+client := wirechat.NewClient(&cfg)
+
+// WebSocket API
+client.OnMessage(...)
+client.Connect(ctx)
+
+// REST API
+client.REST.Register(ctx, ...)
 ```
 
 #### SetLogger(l Logger)
@@ -193,6 +279,21 @@ client.OnUserLeft(func(ev wirechat.UserEvent) {
 })
 ```
 
+#### OnHistory(fn func(HistoryEvent))
+
+Регистрирует обработчик события истории сообщений. Сервер отправляет историю (последние 20 сообщений) при присоединении к комнате.
+
+**Важно**: История отправляется только для authenticated пользователей в комнатах с сохраненными сообщениями.
+
+```go
+client.OnHistory(func(ev wirechat.HistoryEvent) {
+    fmt.Printf("History for %s: %d messages\n", ev.Room, len(ev.Messages))
+    for _, msg := range ev.Messages {
+        fmt.Printf("  [ID:%d] %s: %s\n", msg.ID, msg.User, msg.Text)
+    }
+})
+```
+
 #### OnError(fn func(error))
 
 Регистрирует обработчик ошибок протокола и ошибок соединения. Обработчик вызывается при:
@@ -216,9 +317,10 @@ client.OnError(func(err error) {
 
 ```go
 type MessageEvent struct {
+    ID   int64  `json:"id"`   // ID сообщения (0 для guest сообщений, >0 для сохраненных)
     Room string `json:"room"` // Название комнаты
-    User string `json:"user"`  // Имя отправителя
-    Text string `json:"text"`  // Текст сообщения
+    User string `json:"user"` // Имя отправителя
+    Text string `json:"text"` // Текст сообщения
     TS   int64  `json:"ts"`   // Unix timestamp в секундах
 }
 ```
@@ -233,6 +335,170 @@ type UserEvent struct {
     User string `json:"user"` // Имя пользователя
 }
 ```
+
+#### HistoryEvent
+
+Событие истории сообщений (отправляется при присоединении к комнате).
+
+```go
+type HistoryEvent struct {
+    Room     string         `json:"room"`     // Название комнаты
+    Messages []MessageEvent `json:"messages"` // Массив сообщений (до 20 последних)
+}
+```
+
+## REST API
+
+SDK предоставляет полнофункциональный REST API клиент для управления комнатами, аутентификации и получения истории сообщений.
+
+### Доступ к REST API
+
+```go
+cfg := wirechat.DefaultConfig()
+cfg.RESTBaseURL = "http://localhost:8080/api"
+client := wirechat.NewClient(&cfg)
+
+// REST API доступен через client.REST
+resp, err := client.REST.Register(ctx, ...)
+```
+
+### Authentication API
+
+#### Register
+
+Регистрация нового пользователя.
+
+```go
+resp, err := client.REST.Register(ctx, rest.RegisterRequest{
+    Username: "alice",
+    Password: "secret123",
+})
+// resp.Token содержит JWT токен
+```
+
+#### Login
+
+Вход существующего пользователя.
+
+```go
+resp, err := client.REST.Login(ctx, rest.LoginRequest{
+    Username: "alice",
+    Password: "secret123",
+})
+```
+
+#### GuestLogin
+
+Получение guest токена.
+
+```go
+resp, err := client.REST.GuestLogin(ctx)
+```
+
+#### SetToken
+
+Обновление токена для последующих запросов.
+
+```go
+client.REST.SetToken(token)
+// Также обновите cfg.Token для WebSocket
+cfg.Token = token
+```
+
+### Room Management API
+
+#### CreateRoom
+
+Создание публичной или приватной комнаты.
+
+```go
+room, err := client.REST.CreateRoom(ctx, rest.CreateRoomRequest{
+    Name: "my-room",
+    Type: rest.RoomTypePublic, // или rest.RoomTypePrivate
+})
+// room.ID, room.Name, room.Type
+```
+
+#### ListRooms
+
+Получение списка доступных комнат.
+
+```go
+rooms, err := client.REST.ListRooms(ctx)
+for _, room := range rooms {
+    fmt.Printf("Room: %s (ID: %d, Type: %s)\n", room.Name, room.ID, room.Type)
+}
+```
+
+#### CreateDirectRoom
+
+Создание комнаты для direct-сообщений (1-on-1).
+
+```go
+room, err := client.REST.CreateDirectRoom(ctx, rest.CreateDirectRoomRequest{
+    UserID: 42, // ID пользователя-собеседника
+})
+```
+
+### Message History API
+
+#### GetMessages
+
+Получение истории сообщений с cursor-based пагинацией.
+
+```go
+// Первая страница (последние 20 сообщений)
+history, err := client.REST.GetMessages(ctx, roomID, 20, nil)
+
+fmt.Printf("Found %d messages\n", len(history.Messages))
+for _, msg := range history.Messages {
+    fmt.Printf("[ID:%d] %s: %s\n", msg.ID, msg.User, msg.Body)
+}
+
+// Следующая страница (более старые сообщения)
+if history.HasMore {
+    lastID := history.Messages[len(history.Messages)-1].ID
+    olderHistory, err := client.REST.GetMessages(ctx, roomID, 20, &lastID)
+}
+```
+
+Параметры:
+- `roomID int64`: ID комнаты
+- `limit int`: Количество сообщений (max 100)
+- `before *int64`: Курсор (ID сообщения), с которого начинать выборку (nil = с конца)
+
+### Unified Client Pattern
+
+Используйте WebSocket и REST API в одном клиенте:
+
+```go
+cfg := wirechat.DefaultConfig()
+cfg.URL = "ws://localhost:8080/ws"
+cfg.RESTBaseURL = "http://localhost:8080/api"
+
+client := wirechat.NewClient(&cfg)
+
+// 1. Register via REST
+resp, _ := client.REST.Register(ctx, rest.RegisterRequest{...})
+client.REST.SetToken(resp.Token)
+cfg.Token = resp.Token
+
+// 2. Create room via REST
+room, _ := client.REST.CreateRoom(ctx, rest.CreateRoomRequest{...})
+
+// 3. Connect via WebSocket
+client.OnMessage(func(ev wirechat.MessageEvent) { ... })
+client.Connect(ctx)
+client.Join(ctx, room.Name)
+
+// 4. Send messages via WebSocket
+client.Send(ctx, room.Name, "Hello!")
+
+// 5. Fetch history via REST
+history, _ := client.REST.GetMessages(ctx, room.ID, 20, nil)
+```
+
+См. [examples/rest-demo](examples/rest-demo) для полного примера.
 
 ## Примеры использования
 
@@ -261,7 +527,7 @@ func main() {
     cfg.URL = "ws://localhost:8080/ws"
     cfg.User = "my-user"
 
-    client := wirechat.NewClient(cfg)
+    client := wirechat.NewClient(&cfg)
 
     client.OnMessage(func(ev wirechat.MessageEvent) {
         fmt.Printf("[%s] %s: %s\n", ev.Room, ev.User, ev.Text)
@@ -296,7 +562,7 @@ cfg.URL = "ws://localhost:8080/ws"
 cfg.Token = "your-jwt-token-here"
 // cfg.User не требуется при использовании JWT
 
-client := wirechat.NewClient(cfg)
+client := wirechat.NewClient(&cfg)
 ```
 
 ### Работа с несколькими комнатами
@@ -315,9 +581,16 @@ client.Send(ctx, "dev", "Hello dev!")
 client.Leave(ctx, "random")
 ```
 
-### Полный пример
+### Примеры из репозитория
 
-См. [examples/hello/main.go](examples/hello/main.go) для полного рабочего примера.
+SDK включает несколько полнофункциональных примеров:
+
+- **[examples/hello](examples/hello)**: Базовый пример с WebSocket (подключение, join, send, history)
+- **[examples/join-chat](examples/join-chat)**: Интерактивный CLI чат-клиент
+- **[examples/test-history](examples/test-history)**: Демонстрация History Event
+- **[examples/rest-demo](examples/rest-demo)**: Полный пример REST API + WebSocket integration
+
+См. [examples/README.md](examples/README.md) для деталей.
 
 ## Обработка ошибок
 
