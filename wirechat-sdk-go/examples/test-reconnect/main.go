@@ -9,7 +9,8 @@ import (
 )
 
 func main() {
-	fmt.Println("=== Simple Auto-Reconnect Test ===\n")
+	fmt.Println("=== Simple Auto-Reconnect Test ===")
+	fmt.Println()
 
 	cfg := wirechat.DefaultConfig()
 	cfg.URL = "ws://localhost:8080/ws"
@@ -42,11 +43,15 @@ func main() {
 		return
 	}
 
-	fmt.Println("\n✓ Connected!")
-	fmt.Println("\nNow kill the server with: pkill -f wirechat-server")
+	fmt.Println()
+	fmt.Println("✓ Connected!")
+	fmt.Println()
+	fmt.Println("Now kill the server with: pkill -f wirechat-server")
 	fmt.Println("Watch the client attempt to reconnect automatically.")
-	fmt.Println("Then restart the server and watch it reconnect.\n")
-	fmt.Println("Press Ctrl+C to exit\n")
+	fmt.Println("Then restart the server and watch it reconnect.")
+	fmt.Println()
+	fmt.Println("Press Ctrl+C to exit")
+	fmt.Println()
 
 	// Keep running for 2 minutes
 	time.Sleep(2 * time.Minute)

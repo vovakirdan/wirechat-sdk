@@ -30,6 +30,7 @@ type Client struct {
 	cancel           context.CancelFunc
 	joinedRooms      map[string]bool // Track joined rooms for auto-reconnect
 	reconnectAttempt int             // Current reconnection attempt count
+	messageBuffer    []Inbound       // Buffer for outgoing messages during disconnect
 }
 
 // NewClient constructs a client with provided config.
@@ -227,7 +228,21 @@ func (c *Client) Close() error {
 func (c *Client) send(ctx context.Context, in Inbound) error {
 	c.mu.Lock()
 	connected := c.connected
+
+	// If not connected and buffering is enabled, buffer the message
+	if !connected && c.cfg.BufferMessages {
+		// Check buffer size limit
+		if len(c.messageBuffer) >= c.cfg.MaxBufferSize {
+			c.mu.Unlock()
+			return NewError(ErrorNotConnected, "message buffer full")
+		}
+		// Add to buffer
+		c.messageBuffer = append(c.messageBuffer, in)
+		c.mu.Unlock()
+		return nil
+	}
 	c.mu.Unlock()
+
 	if !connected {
 		return NewError(ErrorNotConnected, "client not connected")
 	}
@@ -344,6 +359,13 @@ func (c *Client) reconnect(ctx context.Context) error {
 		c.logger.Warn("failed to rejoin some rooms", map[string]interface{}{"error": err.Error()})
 	}
 
+	// Flush buffered messages
+	if c.cfg.BufferMessages {
+		if err := c.flushBuffer(ctx); err != nil {
+			c.logger.Warn("failed to flush message buffer", map[string]interface{}{"error": err.Error()})
+		}
+	}
+
 	return nil
 }
 
@@ -360,6 +382,31 @@ func (c *Client) rejoinRooms(ctx context.Context) error {
 		// Send join without updating joinedRooms (already tracked)
 		if err := c.send(ctx, Inbound{Type: inboundJoin, Data: JoinPayload{Room: room}}); err != nil {
 			return WrapError(ErrorConnection, "failed to rejoin room: "+room, err)
+		}
+	}
+
+	return nil
+}
+
+// flushBuffer sends all buffered messages after reconnection.
+func (c *Client) flushBuffer(ctx context.Context) error {
+	c.mu.Lock()
+	buffered := make([]Inbound, len(c.messageBuffer))
+	copy(buffered, c.messageBuffer)
+	c.messageBuffer = c.messageBuffer[:0] // Clear buffer
+	c.mu.Unlock()
+
+	for _, msg := range buffered {
+		// Send directly to writeCh (client is already connected)
+		select {
+		case c.writeCh <- msg:
+			// Message sent successfully
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			// writeCh full, this shouldn't happen but handle gracefully
+			c.logger.Warn("write channel full during buffer flush", nil)
+			return NewError(ErrorConnection, "failed to flush buffer: write channel full")
 		}
 	}
 
