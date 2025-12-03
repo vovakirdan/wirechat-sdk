@@ -29,7 +29,7 @@ func populateRoom() {
 	cfg.URL = "ws://localhost:8080/ws"
 	cfg.Token = token
 
-	client := wirechat.NewClient(cfg)
+	client := wirechat.NewClient(&cfg)
 
 	client.OnMessage(func(ev wirechat.MessageEvent) {
 		fmt.Printf("  Sent message ID:%d\n", ev.ID)
@@ -69,7 +69,7 @@ func testHistory() {
 	cfg.URL = "ws://localhost:8080/ws"
 	cfg.Token = token
 
-	client := wirechat.NewClient(cfg)
+	client := wirechat.NewClient(&cfg)
 
 	historyReceived := false
 

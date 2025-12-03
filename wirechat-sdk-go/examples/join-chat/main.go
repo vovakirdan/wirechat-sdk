@@ -28,7 +28,7 @@ func run() error {
 	cfg.User = "join-and-chat"
 	cfg.ReadTimeout = 0 // Disable read timeout - server handles idle detection with ping/pong
 
-	client := wirechat.NewClient(cfg)
+	client := wirechat.NewClient(&cfg)
 
 	client.OnMessage(func(ev wirechat.MessageEvent) {
 		fmt.Printf("[%s] %s: %s\n", ev.Room, ev.User, ev.Text)

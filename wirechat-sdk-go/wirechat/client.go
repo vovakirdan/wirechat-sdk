@@ -29,9 +29,9 @@ type Client struct {
 // NewClient constructs a client with provided config.
 // Use DefaultConfig() as a starting point and modify as needed.
 // Set timeout to 0 to disable it.
-func NewClient(cfg Config) *Client {
+func NewClient(cfg *Config) *Client {
 	return &Client{
-		cfg:     cfg,
+		cfg:     *cfg,
 		logger:  noopLogger{},
 		writeCh: make(chan Inbound, 16),
 	}

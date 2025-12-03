@@ -30,7 +30,7 @@ func run() error {
 	cfg.Token = ""          // JWT токен (оставьте пустым, если JWT не требуется на сервере)
 
 	// Создаем клиент
-	client := wirechat.NewClient(cfg)
+	client := wirechat.NewClient(&cfg)
 
 	// Настраиваем обработчики событий
 	client.OnMessage(func(ev wirechat.MessageEvent) {

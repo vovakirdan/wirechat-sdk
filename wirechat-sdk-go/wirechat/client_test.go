@@ -36,7 +36,8 @@ func TestDispatcherError(t *testing.T) {
 }
 
 func TestClientSendNotConnected(t *testing.T) {
-	c := NewClient(DefaultConfig())
+	cfg := DefaultConfig()
+	c := NewClient(&cfg)
 	err := c.Send(testCtx(), "room", "hi")
 	if err == nil {
 		t.Fatalf("expected error when not connected")
