@@ -26,6 +26,7 @@ type Client struct {
 	REST *rest.Client
 
 	mu        sync.Mutex
+	state     ConnectionState
 	connected bool
 	cancel    context.CancelFunc
 }
@@ -38,6 +39,7 @@ func NewClient(cfg *Config) *Client {
 		cfg:     *cfg,
 		logger:  noopLogger{},
 		writeCh: make(chan Inbound, 16),
+		state:   StateDisconnected,
 	}
 
 	// Initialize REST client if RESTBaseURL is provided
@@ -74,6 +76,27 @@ func (c *Client) OnHistory(fn func(HistoryEvent)) { c.dispatcher.SetOnHistory(fn
 // OnError registers callback for errors.
 func (c *Client) OnError(fn func(error)) { c.dispatcher.SetOnError(fn) }
 
+// OnStateChanged registers callback for connection state changes.
+func (c *Client) OnStateChanged(fn func(StateEvent)) { c.dispatcher.SetOnStateChanged(fn) }
+
+// State returns the current connection state.
+func (c *Client) State() ConnectionState {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.state
+}
+
+// setState transitions to a new state and fires the state change callback.
+func (c *Client) setState(newState ConnectionState, err error) {
+	c.mu.Lock()
+	oldState := c.state
+	c.state = newState
+	c.mu.Unlock()
+
+	// Fire callback outside of lock to avoid deadlocks
+	c.dispatcher.fireStateChange(oldState, newState, err)
+}
+
 // Connect dials the server, sends hello, and starts internal loops.
 func (c *Client) Connect(ctx context.Context) error {
 	c.mu.Lock()
@@ -83,12 +106,18 @@ func (c *Client) Connect(ctx context.Context) error {
 	}
 	c.mu.Unlock()
 
+	c.setState(StateConnecting, nil)
+
 	if c.cfg.URL == "" {
-		return NewError(ErrorInvalidConfig, "empty URL")
+		err := NewError(ErrorInvalidConfig, "empty URL")
+		c.setState(StateError, err)
+		return err
 	}
 	u, err := url.Parse(c.cfg.URL)
 	if err != nil {
-		return WrapError(ErrorInvalidConfig, "invalid WebSocket URL", err)
+		wrappedErr := WrapError(ErrorInvalidConfig, "invalid WebSocket URL", err)
+		c.setState(StateError, wrappedErr)
+		return wrappedErr
 	}
 
 	dialCtx := ctx
@@ -100,7 +129,9 @@ func (c *Client) Connect(ctx context.Context) error {
 
 	ws, _, err := websocket.Dial(dialCtx, u.String(), nil)
 	if err != nil {
-		return WrapError(ErrorConnection, "failed to dial WebSocket", err)
+		wrappedErr := WrapError(ErrorConnection, "failed to dial WebSocket", err)
+		c.setState(StateError, wrappedErr)
+		return wrappedErr
 	}
 
 	c.rawConn = ws
@@ -122,7 +153,9 @@ func (c *Client) Connect(ctx context.Context) error {
 	}
 	if err := c.conn.Write(ctx, hello); err != nil {
 		_ = c.conn.Close(websocket.StatusInternalError, "handshake error")
-		return WrapError(ErrorConnection, "failed to send hello handshake", err)
+		wrappedErr := WrapError(ErrorConnection, "failed to send hello handshake", err)
+		c.setState(StateError, wrappedErr)
+		return wrappedErr
 	}
 
 	runCtx, cancel := context.WithCancel(context.Background())
@@ -130,6 +163,8 @@ func (c *Client) Connect(ctx context.Context) error {
 	c.mu.Lock()
 	c.connected = true
 	c.mu.Unlock()
+
+	c.setState(StateConnected, nil)
 
 	go c.readLoop(runCtx)
 	go c.writeLoop(runCtx)
@@ -159,6 +194,9 @@ func (c *Client) Close() error {
 	}
 	c.connected = false
 	c.mu.Unlock()
+
+	c.setState(StateClosed, nil)
+
 	if c.conn != nil {
 		return c.conn.Close(websocket.StatusNormalClosure, "client close")
 	}
@@ -186,9 +224,11 @@ func (c *Client) readLoop(ctx context.Context) {
 		var out Outbound
 		if err := c.conn.Read(ctx, &out); err != nil {
 			if isExpectedDisconnect(ctx, err) {
+				c.setState(StateDisconnected, nil)
 				return
 			}
 			wireErr := WrapError(ErrorConnection, "read error", err)
+			c.setState(StateError, wireErr)
 			c.dispatcher.fireError(wireErr)
 			c.logger.Warn("read loop exit", map[string]interface{}{"error": err.Error()})
 			return

@@ -2,18 +2,20 @@ package wirechat
 
 // Dispatcher routes outbound events to registered callbacks.
 type Dispatcher struct {
-	onMessage    func(MessageEvent)
-	onUserJoined func(UserEvent)
-	onUserLeft   func(UserEvent)
-	onHistory    func(HistoryEvent)
-	onError      func(error)
+	onMessage      func(MessageEvent)
+	onUserJoined   func(UserEvent)
+	onUserLeft     func(UserEvent)
+	onHistory      func(HistoryEvent)
+	onError        func(error)
+	onStateChanged func(StateEvent)
 }
 
-func (d *Dispatcher) SetOnMessage(fn func(MessageEvent)) { d.onMessage = fn }
-func (d *Dispatcher) SetOnUserJoined(fn func(UserEvent)) { d.onUserJoined = fn }
-func (d *Dispatcher) SetOnUserLeft(fn func(UserEvent))   { d.onUserLeft = fn }
-func (d *Dispatcher) SetOnHistory(fn func(HistoryEvent)) { d.onHistory = fn }
-func (d *Dispatcher) SetOnError(fn func(error))          { d.onError = fn }
+func (d *Dispatcher) SetOnMessage(fn func(MessageEvent))    { d.onMessage = fn }
+func (d *Dispatcher) SetOnUserJoined(fn func(UserEvent))    { d.onUserJoined = fn }
+func (d *Dispatcher) SetOnUserLeft(fn func(UserEvent))      { d.onUserLeft = fn }
+func (d *Dispatcher) SetOnHistory(fn func(HistoryEvent))    { d.onHistory = fn }
+func (d *Dispatcher) SetOnError(fn func(error))             { d.onError = fn }
+func (d *Dispatcher) SetOnStateChanged(fn func(StateEvent)) { d.onStateChanged = fn }
 
 func (d *Dispatcher) Dispatch(out Outbound) {
 	if out.Type == outboundError && out.Error != nil && d.onError != nil {
@@ -68,5 +70,15 @@ func (d *Dispatcher) Dispatch(out Outbound) {
 func (d *Dispatcher) fireError(err error) {
 	if d.onError != nil && err != nil {
 		d.onError(err)
+	}
+}
+
+func (d *Dispatcher) fireStateChange(oldState, newState ConnectionState, err error) {
+	if d.onStateChanged != nil {
+		d.onStateChanged(StateEvent{
+			OldState: oldState,
+			NewState: newState,
+			Error:    err,
+		})
 	}
 }
