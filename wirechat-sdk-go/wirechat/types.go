@@ -16,6 +16,7 @@ const (
 	eventMessage    = "message"
 	eventUserJoined = "user_joined"
 	eventUserLeft   = "user_left"
+	eventHistory    = "history"
 )
 
 // Inbound represents the envelope from client to server.

@@ -54,6 +54,9 @@ func (c *Client) OnUserJoined(fn func(UserEvent)) { c.dispatcher.SetOnUserJoined
 // OnUserLeft registers callback for user left events.
 func (c *Client) OnUserLeft(fn func(UserEvent)) { c.dispatcher.SetOnUserLeft(fn) }
 
+// OnHistory registers callback for history events (received after joining a room).
+func (c *Client) OnHistory(fn func(HistoryEvent)) { c.dispatcher.SetOnHistory(fn) }
+
 // OnError registers callback for errors.
 func (c *Client) OnError(fn func(error)) { c.dispatcher.SetOnError(fn) }
 
@@ -89,10 +92,16 @@ func (c *Client) Connect(ctx context.Context) error {
 	c.rawConn = ws
 	c.conn = internal.NewConn(ws, c.cfg.ReadTimeout, c.cfg.WriteTimeout)
 
+	// Use protocol from config, fallback to constant if not set
+	protocol := c.cfg.Protocol
+	if protocol == 0 {
+		protocol = ProtocolVersion
+	}
+
 	hello := Inbound{
 		Type: inboundHello,
 		Data: HelloPayload{
-			Protocol: ProtocolVersion,
+			Protocol: protocol,
 			Token:    c.cfg.Token,
 			User:     c.cfg.User,
 		},

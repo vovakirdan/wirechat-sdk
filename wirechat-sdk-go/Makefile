@@ -35,32 +35,43 @@ lint: $(GOLANGCI_LINT)
 	$(GOLANGCI_LINT) run --config .golangci.yaml
 
 # Tag management
-tag-version:
-	@echo ">> Current version:"
-	@git describe --tags --abbrev=0 --match "wirechat-sdk-go/v*" 2>/dev/null || echo "No tags found"
+get-tag:
+	@echo "Актуальный тег Go-SDK"
+	@git describe --tags --abbrev=0 --match "wirechat-sdk-go/*" 2>/dev/null || echo "No tags found"
 
-tag-list:
-	@echo ">> All Go SDK tags:"
-	@git tag -l "wirechat-sdk-go/*" || echo "No tags found"
+get-tag-version:
+	@echo "Версия Go-SDK"
+	@git describe --tags --abbrev=0 --match "wirechat-sdk-go/*" 2>/dev/null | sed 's|wirechat-sdk-go/||' || echo "No tags found"
+
+tag-patch:
+	@echo "Создание нового тега с инкрементом patch-версии"
+	@CURRENT_TAG=$$(git describe --tags --abbrev=0 --match "wirechat-sdk-go/*" 2>/dev/null || echo "wirechat-sdk-go/v0.0.0");\
+	CURRENT_VERSION=$$(echo $$CURRENT_TAG | sed 's|wirechat-sdk-go/v||');\
+	MAJOR=$$(echo $$CURRENT_VERSION | cut -d. -f1);\
+	MINOR=$$(echo $$CURRENT_VERSION | cut -d. -f2);\
+	PATCH=$$(echo $$CURRENT_VERSION | cut -d. -f3);\
+	NEW_PATCH=$$((PATCH + 1));\
+	NEW_VERSION="$$MAJOR.$$MINOR.$$NEW_PATCH";\
+	NEW_TAG="wirechat-sdk-go/v$$NEW_VERSION";\
+	echo "Текущий тег: $$CURRENT_TAG";\
+	echo "Новый тег: $$NEW_TAG";\
+	read -p "Создать тег? (y/n): " confirm && [ "$$confirm" == "y" ] || exit 1; \
+	git tag -a $$NEW_TAG -m "Go SDK $$NEW_VERSION\n\nWireChat Go SDK release $$NEW_VERSION";\
+	echo "Тег $$NEW_TAG создан";\
+	echo "Для отправки тега выполните: git push origin $$NEW_TAG"
 
 tag-create:
-	@echo ">> Creating tag: $(TAG_NAME)"
-	@git tag -a $(TAG_NAME) -m "Go SDK $(VERSION)\n\nWireChat Go SDK release $(VERSION)"
-	@echo ">> Tag created successfully!"
-	@echo ">> Push with: make tag-push VERSION=$(VERSION)"
-
-tag-push:
-	@echo ">> Pushing tag: $(TAG_NAME)"
-	@git push origin $(TAG_NAME)
-	@echo ">> Tag pushed successfully!"
-	@echo ">> Users can now install with:"
-	@echo "   go get github.com/vovakirdan/wirechat-sdk/wirechat-sdk-go@$(TAG_NAME)"
-
-tag-delete:
-	@echo ">> Deleting tag: $(TAG_NAME)"
-	@git tag -d $(TAG_NAME)
-	@git push origin :refs/tags/$(TAG_NAME)
-	@echo ">> Tag deleted!"
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Версия не указана"; \
+		echo "Укажите версию через VERSION=<MAJOR>.<MINOR>.<PATCH>";\
+		exit 1;\
+	fi;\
+	NEW_TAG="wirechat-sdk-go/v$(VERSION)";\
+	echo "Создание тега: $$NEW_TAG";\
+	read -p "Создать тег? (y/n): " confirm && [ "$$confirm" == "y" ] || exit 1; \
+	git tag -a $$NEW_TAG -m "Go SDK $(VERSION)\n\nWireChat Go SDK release $(VERSION)";\
+	echo "Тег $$NEW_TAG создан";\
+	echo "Для отправки тега выполните: git push origin $$NEW_TAG"
 
 # Helper to create and push tag in one command
 tag: tag-create tag-push

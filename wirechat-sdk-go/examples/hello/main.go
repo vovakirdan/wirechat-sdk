@@ -34,7 +34,23 @@ func run() error {
 
 	// Настраиваем обработчики событий
 	client.OnMessage(func(ev wirechat.MessageEvent) {
-		fmt.Printf("[%s] %s: %s\n", ev.Room, ev.User, ev.Text)
+		if ev.ID != 0 {
+			fmt.Printf("[%s] %s (ID:%d): %s\n", ev.Room, ev.User, ev.ID, ev.Text)
+		} else {
+			fmt.Printf("[%s] %s: %s\n", ev.Room, ev.User, ev.Text)
+		}
+	})
+
+	client.OnHistory(func(ev wirechat.HistoryEvent) {
+		fmt.Printf("\n=== History for room '%s' (%d messages) ===\n", ev.Room, len(ev.Messages))
+		for _, msg := range ev.Messages {
+			if msg.ID != 0 {
+				fmt.Printf("  [%d] %s: %s\n", msg.ID, msg.User, msg.Text)
+			} else {
+				fmt.Printf("  %s: %s\n", msg.User, msg.Text)
+			}
+		}
+		fmt.Println("=== End of history ===")
 	})
 
 	client.OnUserJoined(func(ev wirechat.UserEvent) {

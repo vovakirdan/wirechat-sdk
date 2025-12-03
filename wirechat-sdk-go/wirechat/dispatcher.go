@@ -5,12 +5,14 @@ type Dispatcher struct {
 	onMessage    func(MessageEvent)
 	onUserJoined func(UserEvent)
 	onUserLeft   func(UserEvent)
+	onHistory    func(HistoryEvent)
 	onError      func(error)
 }
 
 func (d *Dispatcher) SetOnMessage(fn func(MessageEvent)) { d.onMessage = fn }
 func (d *Dispatcher) SetOnUserJoined(fn func(UserEvent)) { d.onUserJoined = fn }
 func (d *Dispatcher) SetOnUserLeft(fn func(UserEvent))   { d.onUserLeft = fn }
+func (d *Dispatcher) SetOnHistory(fn func(HistoryEvent)) { d.onHistory = fn }
 func (d *Dispatcher) SetOnError(fn func(error))          { d.onError = fn }
 
 func (d *Dispatcher) Dispatch(out Outbound) {
@@ -49,6 +51,16 @@ func (d *Dispatcher) Dispatch(out Outbound) {
 			return
 		}
 		d.onUserLeft(ev)
+	case eventHistory:
+		if d.onHistory == nil {
+			return
+		}
+		var ev HistoryEvent
+		if err := UnmarshalData(out.Data, &ev); err != nil {
+			d.fireError(err)
+			return
+		}
+		d.onHistory(ev)
 	}
 }
 
