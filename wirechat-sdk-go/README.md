@@ -8,6 +8,10 @@
 - **REST API**: Управление комнатами, аутентификация, история сообщений
 - **Unified Client**: Единый клиент для WebSocket и REST API
 - **Event-driven**: Обработчики событий для сообщений, присоединений, истории
+- **Auto-Reconnection**: Автоматическое переподключение с exponential backoff
+- **Connection State**: Observable состояние соединения (Disconnected, Connecting, Connected, Reconnecting, Error, Closed)
+- **Message Buffering**: Буферизация исходящих сообщений во время отключения
+- **Enhanced Errors**: Типизированные ошибки с ErrorCode enum
 - **Protocol v1**: Полная поддержка WireChat Protocol Version 1
 - **Type-safe**: Строгая типизация всех API
 
@@ -123,14 +127,27 @@ func main() {
 
 ```go
 type Config struct {
+    // WebSocket configuration
     URL              string        // WebSocket URL (например, "ws://localhost:8080/ws")
     Token            string        // JWT токен для авторизации (если требуется)
     User             string        // Имя пользователя (используется, если JWT не требуется)
     Protocol         int           // Версия протокола (по умолчанию 1)
-    RESTBaseURL      string        // REST API base URL (например, "http://localhost:8080/api")
     HandshakeTimeout time.Duration // Таймаут установления соединения
     ReadTimeout      time.Duration // Таймаут чтения сообщений (0 = infinite, рекомендуется)
     WriteTimeout     time.Duration // Таймаут отправки сообщений
+
+    // REST API configuration
+    RESTBaseURL      string        // REST API base URL (например, "http://localhost:8080/api")
+
+    // Auto-reconnect configuration
+    AutoReconnect     bool          // Включить автоматическое переподключение (по умолчанию: false)
+    ReconnectInterval time.Duration // Начальная задержка переподключения (по умолчанию: 1s)
+    MaxReconnectDelay time.Duration // Максимальная задержка переподключения (по умолчанию: 30s)
+    MaxReconnectTries int           // Максимальное количество попыток (0 = бесконечно, по умолчанию: 0)
+
+    // Message buffering configuration
+    BufferMessages bool // Включить буферизацию исходящих сообщений при отключении (по умолчанию: false)
+    MaxBufferSize  int  // Максимальное количество буферизованных сообщений (по умолчанию: 100)
 }
 ```
 
@@ -307,7 +324,47 @@ client.OnError(func(err error) {
 })
 ```
 
-**Важно:** После ошибки соединения клиент может быть в неработоспособном состоянии. Рекомендуется пересоздать клиент для переподключения.
+**Важно:** При включенном `AutoReconnect` клиент автоматически переподключается после ошибки соединения. Без `AutoReconnect` клиент переходит в состояние `Error` и требует пересоздания.
+
+#### OnStateChanged(fn func(StateEvent))
+
+Регистрирует обработчик изменений состояния соединения. Вызывается при переходе между состояниями:
+
+```go
+client.OnStateChanged(func(ev wirechat.StateEvent) {
+    fmt.Printf("State: %s -> %s\n", ev.OldState, ev.NewState)
+    if ev.Error != nil {
+        fmt.Printf("Error: %v\n", ev.Error)
+    }
+})
+```
+
+**StateEvent**:
+```go
+type StateEvent struct {
+    OldState ConnectionState
+    NewState ConnectionState
+    Error    error // Optional: error that caused the state change
+}
+```
+
+**ConnectionState** enum:
+- `StateDisconnected`: Отключен от сервера
+- `StateConnecting`: Установление соединения
+- `StateConnected`: Подключен к серверу
+- `StateReconnecting`: Переподключение после ошибки
+- `StateError`: Ошибка соединения (если `AutoReconnect` отключен)
+- `StateClosed`: Соединение закрыто пользователем
+
+#### State() ConnectionState
+
+Возвращает текущее состояние соединения:
+
+```go
+if client.State() == wirechat.StateConnected {
+    fmt.Println("Connected!")
+}
+```
 
 ### Типы событий
 
@@ -499,6 +556,247 @@ history, _ := client.REST.GetMessages(ctx, room.ID, 20, nil)
 ```
 
 См. [examples/rest-demo](examples/rest-demo) для полного примера.
+
+## Расширенные возможности
+
+### Auto-Reconnection (Автоматическое переподключение)
+
+SDK поддерживает автоматическое переподключение с exponential backoff при неожиданном разрыве соединения.
+
+#### Конфигурация
+
+```go
+cfg := wirechat.DefaultConfig()
+cfg.URL = "ws://localhost:8080/ws"
+cfg.User = "myuser"
+
+// Включаем auto-reconnect
+cfg.AutoReconnect = true
+cfg.ReconnectInterval = 1 * time.Second  // Начальная задержка
+cfg.MaxReconnectDelay = 30 * time.Second // Максимальная задержка
+cfg.MaxReconnectTries = 0                // 0 = бесконечно
+
+client := wirechat.NewClient(&cfg)
+```
+
+#### Как работает
+
+1. **Exponential Backoff**: Задержка между попытками переподключения увеличивается экспоненциально:
+   - 1s, 2s, 4s, 8s, 16s, 30s (максимум)
+
+2. **Smart Disconnect Detection**: SDK различает ожидаемые и неожиданные отключения:
+   - **Переподключение НЕ происходит**: `client.Close()` (явное закрытие), отмена контекста
+   - **Переподключение происходит**: EOF, ошибки сети, разрыв соединения
+
+3. **Автоматическое восстановление**: После успешного переподключения:
+   - SDK автоматически повторно присоединяется ко всем комнатам
+   - Буферизованные сообщения отправляются (если включен `BufferMessages`)
+
+4. **Отслеживание состояния**: Используйте `OnStateChanged` для мониторинга:
+   ```go
+   client.OnStateChanged(func(ev wirechat.StateEvent) {
+       switch ev.NewState {
+       case wirechat.StateConnected:
+           fmt.Println("✓ Connected!")
+       case wirechat.StateReconnecting:
+           fmt.Println("⟳ Reconnecting...")
+       case wirechat.StateDisconnected:
+           fmt.Println("✗ Disconnected")
+       }
+   })
+   ```
+
+#### Пример
+
+```go
+cfg := wirechat.DefaultConfig()
+cfg.URL = "ws://localhost:8080/ws"
+cfg.User = "myuser"
+cfg.AutoReconnect = true
+cfg.MaxReconnectTries = 5 // Попробовать 5 раз
+
+client := wirechat.NewClient(&cfg)
+
+client.OnStateChanged(func(ev wirechat.StateEvent) {
+    fmt.Printf("State: %s -> %s\n", ev.OldState, ev.NewState)
+})
+
+client.OnError(func(err error) {
+    fmt.Printf("Error: %v\n", err)
+})
+
+ctx := context.Background()
+client.Connect(ctx)
+
+// Клиент автоматически переподключится при разрыве соединения
+```
+
+См. [examples/test-reconnect](examples/test-reconnect) для полного примера тестирования.
+
+### Message Buffering (Буферизация сообщений)
+
+SDK может буферизовать исходящие сообщения во время отключения и автоматически отправлять их после переподключения.
+
+#### Конфигурация
+
+```go
+cfg := wirechat.DefaultConfig()
+cfg.URL = "ws://localhost:8080/ws"
+cfg.User = "myuser"
+
+// Включаем buffering
+cfg.AutoReconnect = true     // Требуется для автоматического flush
+cfg.BufferMessages = true    // Включить буферизацию
+cfg.MaxBufferSize = 100      // Максимум 100 сообщений в буфере
+
+client := wirechat.NewClient(&cfg)
+```
+
+#### Как работает
+
+1. **Автоматическая буферизация**: Если клиент не подключен, вызовы `Send()`, `Join()`, `Leave()` добавляют сообщения в буфер вместо ошибки.
+
+2. **FIFO очередь**: Сообщения отправляются в том же порядке, в котором были вызваны.
+
+3. **Лимит буфера**: При превышении `MaxBufferSize` методы возвращают ошибку:
+   ```go
+   err := client.Send(ctx, "general", "Hello")
+   if err != nil {
+       var wireErr *wirechat.WirechatError
+       if errors.As(err, &wireErr) && wireErr.Code == wirechat.ErrorNotConnected {
+           fmt.Println("Buffer full or not connected")
+       }
+   }
+   ```
+
+4. **Автоматический flush**: После успешного переподключения буфер автоматически отправляется.
+
+#### Пример
+
+```go
+cfg := wirechat.DefaultConfig()
+cfg.AutoReconnect = true
+cfg.BufferMessages = true
+cfg.MaxBufferSize = 50
+
+client := wirechat.NewClient(&cfg)
+client.Connect(ctx)
+
+// Эти сообщения будут буферизованы, если соединение разорвалось
+client.Send(ctx, "general", "Message 1")
+client.Send(ctx, "general", "Message 2")
+// ... после переподключения сообщения отправятся автоматически
+```
+
+### Enhanced Error Handling (Улучшенная обработка ошибок)
+
+SDK использует типизированные ошибки с `ErrorCode` enum для упрощенной обработки ошибок.
+
+#### WirechatError
+
+```go
+type WirechatError struct {
+    Code    ErrorCode // Код ошибки
+    Message string    // Описание ошибки
+    Wrapped error     // Исходная ошибка (если есть)
+}
+
+type ErrorCode string
+
+const (
+    // Protocol errors (от сервера)
+    ErrorUnsupportedVersion ErrorCode = "unsupported_version"
+    ErrorUnauthorized       ErrorCode = "unauthorized"
+    ErrorBadRequest         ErrorCode = "bad_request"
+    ErrorRoomNotFound       ErrorCode = "room_not_found"
+    ErrorAlreadyJoined      ErrorCode = "already_joined"
+    ErrorNotInRoom          ErrorCode = "not_in_room"
+    ErrorAccessDenied       ErrorCode = "access_denied"
+    ErrorRateLimited        ErrorCode = "rate_limited"
+    ErrorInternalError      ErrorCode = "internal_error"
+
+    // Client-side errors
+    ErrorConnection         ErrorCode = "connection_error"
+    ErrorDisconnected       ErrorCode = "disconnected"
+    ErrorTimeout            ErrorCode = "timeout"
+    ErrorInvalidConfig      ErrorCode = "invalid_config"
+    ErrorNotConnected       ErrorCode = "not_connected"
+    ErrorSerializationError ErrorCode = "serialization_error"
+)
+```
+
+#### Обработка ошибок
+
+```go
+err := client.Join(ctx, "private-room")
+if err != nil {
+    var wireErr *wirechat.WirechatError
+    if errors.As(err, &wireErr) {
+        switch wireErr.Code {
+        case wirechat.ErrorAccessDenied:
+            fmt.Println("Access denied to room")
+        case wirechat.ErrorRateLimited:
+            fmt.Println("Rate limited, slow down")
+        case wirechat.ErrorNotConnected:
+            fmt.Println("Not connected to server")
+        default:
+            fmt.Printf("Error: %s - %s\n", wireErr.Code, wireErr.Message)
+        }
+
+        // Проверка на обернутую ошибку
+        if wireErr.Wrapped != nil {
+            fmt.Printf("Underlying error: %v\n", wireErr.Wrapped)
+        }
+    }
+}
+```
+
+#### Helper Functions
+
+SDK предоставляет helper-функции для быстрой проверки типа ошибки:
+
+```go
+err := client.Send(ctx, "general", "Hello")
+if err != nil {
+    if wirechat.IsProtocolError(err) {
+        // Ошибка протокола от сервера
+        fmt.Println("Server returned an error")
+    }
+
+    if wirechat.IsConnectionError(err) {
+        // Ошибка соединения (сеть, таймаут, etc.)
+        fmt.Println("Connection problem")
+    }
+}
+```
+
+**IsProtocolError** возвращает `true` для:
+- `unsupported_version`, `unauthorized`, `bad_request`, `room_not_found`, `already_joined`, `not_in_room`, `access_denied`, `rate_limited`, `internal_error`
+
+**IsConnectionError** возвращает `true` для:
+- `connection_error`, `disconnected`, `timeout`, `not_connected`
+
+#### Пример комплексной обработки
+
+```go
+client.OnError(func(err error) {
+    var wireErr *wirechat.WirechatError
+    if errors.As(err, &wireErr) {
+        switch wireErr.Code {
+        case wirechat.ErrorRateLimited:
+            fmt.Println("⚠ Rate limited - slowing down")
+        case wirechat.ErrorConnection:
+            if cfg.AutoReconnect {
+                fmt.Println("⟳ Connection lost, auto-reconnecting...")
+            } else {
+                fmt.Println("✗ Connection lost")
+            }
+        default:
+            fmt.Printf("Error: %s - %s\n", wireErr.Code, wireErr.Message)
+        }
+    }
+})
+```
 
 ## Примеры использования
 

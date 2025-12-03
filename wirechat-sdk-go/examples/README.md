@@ -96,6 +96,31 @@ go run ./examples/rest-demo
 - Full CRUD для комнат
 - Message history с cursor-based pagination
 
+### [test-reconnect](./test-reconnect) - Auto-Reconnection Test
+
+Тестовый клиент для демонстрации автоматического переподключения:
+- Auto-reconnect с exponential backoff
+- Отслеживание состояния соединения (OnStateChanged)
+- Smart disconnect detection (отличает явное закрытие от сетевых ошибок)
+- Автоматическое восстановление комнат после переподключения
+
+```bash
+go run ./examples/test-reconnect
+```
+
+**Как тестировать**:
+1. Запустите клиент - он подключится к серверу
+2. Убейте сервер: `pkill -f wirechat-server`
+3. Наблюдайте попытки переподключения с exponential backoff
+4. Перезапустите сервер
+5. Клиент автоматически переподключится
+
+**Демонстрирует**:
+- `cfg.AutoReconnect = true` - включение автопереподключения
+- `cfg.MaxReconnectTries = 5` - ограничение количества попыток
+- Exponential backoff: 2s, 4s, 8s, 10s (capped)
+- State transitions: Connected → Disconnected → Reconnecting → Connected
+
 ## Советы
 
 - **Guest mode**: Оставьте `cfg.Token = ""` для подключения как guest
